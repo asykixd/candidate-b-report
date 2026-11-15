@@ -24,6 +24,8 @@ python3 report.py --data-dir ./другая-выгрузка --as-of 2026-11-10 
 
 ## Проверки
 
+Тесты запускаются стандартными средствами Python. Для проверки оформления кода нужен Ruff, его можно установить командой `python3 -m pip install ruff`.
+
 ```sh
 python3 -m unittest discover -s tests -v
 ruff format --check .
