@@ -1,39 +1,39 @@
-# Decisions
+# Решения и допущения
 
-The report reconstructs the end of a calendar day from the rows in the provided export. The allocation is an accounting assumption to confirm with the accountant.
+Отчёт строится по предоставленной выгрузке на конец выбранного дня. Правила зачёта платежей нужно подтвердить с бухгалтером.
 
-## Report date and signed contracts
+## Дата отчёта
 
-- Options include filtering by export status, filtering by entry date, or using dates of the underlying events.
-- Use the event dates up to and including the report date. Treat the export as the known list of work items and include a contract from its signing date. The work export has no creation date or price history. A payment entered after the fact still counts from its `paid_at` date.
-- If the report should show only information recorded by that date, backdated payments and work added or repriced later can change earlier reports. The work export would need change history to apply that policy.
+- Можно было смотреть на статус в выгрузке, на дату внесения записи или на дату самого события.
+- Использую даты оплаты, возврата, приёмки и отмены включительно по дату отчёта. Договор появляется в отчёте с даты подписания. Беру список работ из выгрузки, поскольку в ней нет дат добавления работ и истории цен.
+- Если нужны только сведения, уже внесённые в учёт на тот день, придётся получить историю изменений. Иначе внесённые задним числом платежи, позднее добавленные работы и изменения цен могут повлиять на отчёты за прошлые даты.
 
-## Payments, refunds, and purpose
+## Какие платежи учитывать
 
-- Options include counting queued payments, counting all rows marked paid, or using net cash by `paid_at` and `refunded_at`.
-- Count cash from `paid_at`. A refund removes the entire payment from `refunded_at` because the export has no separate refund amount. Queued payments have no cash effect. Use the explicit work ID for assignments and treat the free-text purpose as context. This counts the payment for shooting materials against the work it references.
-- If partial refunds exist, the report needs the actual refund amounts. If queued payments are commitments or materials are reimbursed outside the contract, they need a separate measure and the balances may change.
+- Можно было включить очередь на оплату, ориентироваться на текущий статус или считать только фактические выплаты за вычетом возвратов.
+- Учитываю платёж с `paid_at`, исключаю его с `refunded_at`. Возврат считаю полным, поскольку отдельной суммы возврата нет. Платёж с номером работы отношу к ней. Поэтому платёж за материалы засчитывается в оплату указанной съёмки. Текст назначения использую как справочную информацию.
+- При частичных возвратах нужна отдельная сумма возврата. Если материалы оплачиваются сверх договора или платежи в очереди считаются обязательствами, их нужно отразить отдельно. Это может изменить остатки.
 
-## Contract-level payments without a work ID
+## Как распределять общие платежи
 
-- Options include spreading them proportionally across all works, filling accepted works in order, or leaving the entire pool unassigned.
-- First credit explicit payments to their work items. Then use the pool for accepted work in acceptance-date order, breaking ties by work ID and stopping at each price. Show the remaining pool as unallocated. Acceptance is the only dated evidence in the export that a work item is ready to be settled.
-- If advances should cover planned work or be split proportionally, work-level amounts and the unallocated balance will change. Net cash per contract will stay the same. The allocation is recalculated for the requested date, so new direct payments, cancellations, or refunds can change which work items get the pool.
+- Можно было распределить их пропорционально по всем работам, зачесть по порядку приёмки или оставить всю сумму без привязки.
+- Сначала учитываю платежи с номером работы. Общие деньги распределяю по принятым работам от самой ранней, пока оплата каждой не достигнет её цены. Если даты приёмки совпадают, использую порядок номеров работ. Приёмка — единственное событие в выгрузке, по которому видно, что работу уже можно закрыть оплатой. Неиспользованную сумму показываю отдельно.
+- Если аванс нужно распределять пропорционально или зачесть в будущие работы, изменятся выплаченные суммы по работам и сумма без привязки. Общая выплата по договору от правила распределения не зависит. При новом отчёте распределение пересчитывается с учётом приёмок, отмен и возвратов на выбранную дату.
 
-## Planned and cancelled work
+## Будущие и отменённые работы
 
-- Options include hiding cancelled rows, treating their listed price as payable, or showing them with their original price and zero due after cancellation.
-- Keep every work row for traceability. Treat work as planned until acceptance and include its unpaid part in the active-work balance. Show a separate accepted-work balance to distinguish those amounts. After cancellation, keep the listed price visible and set due to zero. Preserve any payment explicitly tied to a planned or cancelled work and flag money tied to cancellations.
-- If a cancellation fee applies, the work balance will be too low until the fee is entered. If linked payments need to be transferred or refunded, the allocation will change once there is an accounting entry for that movement.
+- Можно было скрыть отменённые работы, считать, что их полная цена ещё подлежит оплате, или оставить их в отчёте с нулевым остатком.
+- Оставляю все работы, чтобы их можно было сверить с выгрузкой. По отменённой работе показываю исходную цену и нулевой остаток, а привязанные выплаты отмечаю отдельно. По работе, которую ещё не приняли, остаток входит в итог по действующим работам. Остаток по принятым работам показываю отдельной строкой.
+- Если за отмену полагается компенсация, остаток занижен на её сумму. Если уже перечисленные деньги нужно вернуть или перенести на другую работу, для пересчёта нужна соответствующая запись в учёте.
 
-## Contract total and overpayments
+## Сумма договора и переплаты
 
-- Options include deriving the contract total from active work prices or showing the signed amount and the current work total separately.
-- Use the signed amount for the contract balance and the item prices for work balances. Show gaps between the two. Remaining amounts stop at zero and excess cash is reported separately. Preserve all linked cash on its referenced work and keep any unused pool visible to reconcile net cash.
-- If scope changes also change the contract amount, the signed amount must be updated from the amendment. If excess payments automatically offset other debts, the balance per work will change. Subtracting the displayed unallocated sum from the displayed work balance requires a separate accounting decision.
+- Можно было пересчитать сумму договора по действующим работам или показывать подписанную сумму и текущую стоимость работ отдельно.
+- Остаток по договору считаю от подписанной суммы, остатки по работам — от их цен. Разницу показываю явно. Остаток к оплате ограничиваю нулём, а превышение отражаю как переплату. Выплату оставляю за указанной в учёте работой, даже если сумма выше её цены.
+- Если отмена работы меняет сумму договора, нужен новый номинал из допсоглашения. Если переплата автоматически закрывает другие долги, изменятся остатки по работам. Зачёт нераспределённых денег в будущие работы нужно подтвердить отдельно.
 
-## Input validation and precision
+## Проверка данных и копейки
 
-- Options include skipping questionable rows, guessing their intended value, or stopping and naming the problem.
-- Stop on invalid dates or amounts, contradictory status and event dates, duplicate IDs, and broken references. Import UTF-8 CSV with standard quoting and use integer kopecks for all calculations. This prevents an ambiguous row from silently changing reported totals.
-- If the export legitimately represents negative adjustments, partial refunds, or additional statuses, the parser will need the corresponding rules before it can report them.
+- При ошибке можно было пропустить строку, подставить значение или остановить расчёт и показать причину.
+- Останавливаю расчёт при некорректных датах и суммах, дубликатах номеров, противоречии между статусом и датами или ошибочной связи платежа с работой. Все суммы перевожу в целые копейки, чтобы расчёт был точным.
+- Если появятся отрицательные корректировки, частичные возвраты или новые статусы, понадобятся правила их учёта. До этого скрипт покажет ошибку или, для возврата без отдельной суммы, применит допущение о полном возврате.

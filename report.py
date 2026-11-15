@@ -13,7 +13,7 @@ from typing import TypeVar
 
 
 class DataError(ValueError):
-    """The export contains an invalid or ambiguous record."""
+    """В выгрузке есть ошибка или неоднозначная запись."""
 
 
 @dataclass(frozen=True)
@@ -101,9 +101,9 @@ def read_date(value: str, column: str) -> date:
     try:
         result = date.fromisoformat(value)
     except ValueError as error:
-        raise DataError(f"{column}: expected a date in YYYY-MM-DD format") from error
+        raise DataError(f"{column}: укажите дату в формате ГГГГ-ММ-ДД") from error
     if result.isoformat() != value:
-        raise DataError(f"{column}: expected a date in YYYY-MM-DD format")
+        raise DataError(f"{column}: укажите дату в формате ГГГГ-ММ-ДД")
     return result
 
 
@@ -113,14 +113,14 @@ def read_optional_date(value: str, column: str) -> date | None:
 
 def read_money(value: str, column: str) -> int:
     if not re.fullmatch(r"[0-9]+(?:\.[0-9]{1,2})?", value):
-        raise DataError(f"{column}: expected nonnegative rubles with up to two decimal places")
+        raise DataError(f"{column}: ожидается сумма в рублях, от нуля и до двух знаков после точки")
     rubles, _, kopecks = value.partition(".")
     return int(rubles) * 100 + int(kopecks.ljust(2, "0"))
 
 
 def required(row: dict[str, str], column: str) -> str:
     if not row[column]:
-        raise DataError(f"{column}: value is required")
+        raise DataError(f"{column}: заполните обязательное поле")
     return row[column]
 
 
@@ -139,9 +139,9 @@ def parse_work(row: dict[str, str]) -> Work:
     status = row["status"]
     expected_status = "cancelled" if cancelled else "done" if completed else "planned"
     if status != expected_status:
-        raise DataError(f"status {status!r} does not match completed_at and cancelled_at")
+        raise DataError(f"статус {status!r} не соответствует датам completed_at и cancelled_at")
     if completed and cancelled and completed > cancelled:
-        raise DataError("completed_at is after cancelled_at")
+        raise DataError("дата приёмки completed_at позже даты отмены cancelled_at")
     return Work(
         required(row, "work_id"),
         required(row, "contract_id"),
@@ -159,9 +159,9 @@ def parse_payment(row: dict[str, str]) -> Payment:
     status = row["status"]
     expected_status = "refunded" if refunded else "paid" if paid else "queued"
     if status != expected_status:
-        raise DataError(f"status {status!r} does not match paid_at and refunded_at")
+        raise DataError(f"статус {status!r} не соответствует датам paid_at и refunded_at")
     if refunded and (paid is None or refunded < paid):
-        raise DataError("refunded_at requires a paid_at on or before the refund date")
+        raise DataError("для возврата нужна дата оплаты paid_at не позднее refunded_at")
     return Payment(
         required(row, "payment_id"),
         required(row, "contract_id"),
@@ -186,11 +186,11 @@ def read_table(
             reader = csv.DictReader(stream, strict=True)
             headers = reader.fieldnames or []
             if set(headers) != expected or len(headers) != len(expected):
-                raise DataError(f"{path.name}: expected columns {columns}")
+                raise DataError(f"{path.name}: ожидаются столбцы {columns}")
             for raw in reader:
                 location = f"{path.name}:{reader.line_num}"
                 if None in raw or any(value is None for value in raw.values()):
-                    raise DataError(f"{location}: incorrect number of columns")
+                    raise DataError(f"{location}: неверное количество столбцов")
                 row = {key: value.strip() for key, value in raw.items()}
                 try:
                     record = parse(row)
@@ -198,11 +198,15 @@ def read_table(
                     raise DataError(f"{location}: {error}") from error
                 identifier = row[id_column]
                 if identifier in seen:
-                    raise DataError(f"{location}: duplicate {id_column} {identifier!r}")
+                    raise DataError(f"{location}: повторяется {id_column} {identifier!r}")
                 seen.add(identifier)
                 records.append(record)
-    except (OSError, UnicodeError, csv.Error) as error:
-        raise DataError(f"{path}: {error}") from error
+    except OSError as error:
+        raise DataError(f"{path}: не удалось прочитать файл ({error.strerror})") from error
+    except UnicodeError as error:
+        raise DataError(f"{path}: файл должен быть в кодировке UTF-8") from error
+    except csv.Error as error:
+        raise DataError(f"{path}: ошибка формата CSV ({error})") from error
     return records
 
 
@@ -226,16 +230,18 @@ def load_ledger(data_dir: Path) -> Ledger:
     works_by_id = {item.work_id: item for item in works}
     for work in works:
         if work.contract_id not in contract_ids:
-            raise DataError(f"works.csv: {work.work_id}: unknown contract {work.contract_id!r}")
+            raise DataError(f"works.csv: {work.work_id}: неизвестный договор {work.contract_id!r}")
     for payment in payments:
         if payment.contract_id not in contract_ids:
-            raise DataError(f"payments.csv: {payment.payment_id}: unknown contract {payment.contract_id!r}")
+            raise DataError(
+                f"payments.csv: {payment.payment_id}: неизвестный договор {payment.contract_id!r}"
+            )
         if payment.work_id is not None:
             work = works_by_id.get(payment.work_id)
             if work is None or work.contract_id != payment.contract_id:
                 raise DataError(
-                    f"payments.csv: {payment.payment_id}: work {payment.work_id!r} "
-                    f"does not belong to contract {payment.contract_id!r}"
+                    f"payments.csv: {payment.payment_id}: работа {payment.work_id!r} "
+                    f"не относится к договору {payment.contract_id!r}"
                 )
     return Ledger(contracts, works, payments)
 
@@ -256,8 +262,8 @@ def allocate_contract(
     statuses = {work.work_id: work.status_on(as_of) for work in works}
     accepted = (work for work in works if statuses[work.work_id] == "done")
     from_pool: dict[str, int] = {}
-    # Preserve explicit assignments even when they exceed the price. Only the
-    # unlinked pool is capped and applied in historical acceptance order.
+    # Лимит цены действует для общих денег, чтобы переплата по привязанной
+    # работе тоже оставалась видна.
     for work in sorted(accepted, key=lambda item: (item.completed_at or date.max, item.work_id)):
         amount = min(pool, max(0, work.price - direct[work.work_id]))
         from_pool[work.work_id] = amount
@@ -359,15 +365,23 @@ def render_report(balances: Sequence[ContractBalance], as_of: date) -> str:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Build a payment report from the accounting export.")
-    parser.add_argument("--as-of", required=True, help="report date, inclusive (YYYY-MM-DD)")
-    parser.add_argument("--data-dir", type=Path, default=Path(__file__).resolve().parent / "data")
+    parser = argparse.ArgumentParser(description="Отчёт по оплате работ по договорам.", add_help=False)
+    options = parser.add_argument_group("Параметры")
+    options.add_argument("-h", "--help", action="help", help="показать справку")
+    options.add_argument("--as-of", required=True, metavar="ДАТА", help="дата отчёта в формате ГГГГ-ММ-ДД")
+    options.add_argument(
+        "--data-dir",
+        type=Path,
+        default=Path(__file__).resolve().parent / "data",
+        metavar="ПАПКА",
+        help="папка с CSV, по умолчанию data рядом со скриптом",
+    )
     args = parser.parse_args(argv)
     try:
         as_of = read_date(args.as_of, "--as-of")
         balances = build_report(load_ledger(args.data_dir), as_of)
     except DataError as error:
-        print(f"Error: {error}", file=sys.stderr)
+        print(f"Ошибка: {error}", file=sys.stderr)
         return 2
     print(render_report(balances, as_of))
     return 0

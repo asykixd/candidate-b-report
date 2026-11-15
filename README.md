@@ -1,28 +1,28 @@
-# Contract payment report
+# Отчёт по оплате работ по договорам
 
-The CLI reads the three CSV files in `data/` and prints a Russian-language Markdown report for the end of a specified date. It lists every work item under each signed contract and reconciles money received by the contractor with amounts assigned to that contract's work items.
+Скрипт читает три CSV-файла из папки `data/` и строит отчёт на конец указанного дня. По каждой работе он показывает цену, выплаченную сумму и остаток. По договору отдельно видны все выплаты подрядчику и суммы, которые зачтены по работам.
 
-## Run
+## Запуск
 
-Use Python 3.10 or later. The CLI uses the standard library.
+Нужен Python 3.10 или новее. Дополнительные библиотеки устанавливать не нужно.
 
 ```sh
 python3 report.py --as-of 2026-11-10
 ```
 
-Use `--data-dir` for another export and redirect stdout to save the report.
+Чтобы взять другую выгрузку и сохранить отчёт в файл, передайте путь через `--data-dir`.
 
 ```sh
-python3 report.py --data-dir /path/to/data --as-of 2026-11-10 > report.md
+python3 report.py --data-dir ./другая-выгрузка --as-of 2026-11-10 > report.md
 ```
 
-The default data directory is next to `report.py`. Invalid inputs produce an error on stderr and exit status 2. A successful run prints the report and exits with status 0.
+По умолчанию скрипт берёт данные из папки `data/` рядом с `report.py`. При ошибке он пишет причину в stderr и завершает работу с кодом 2.
 
-- [Sample report for 10 November 2026](REPORT-2026-11-10.md)
-- [Accounting note](ACCOUNTANT.md)
-- [Decisions and assumptions](DECISIONS.md)
+- [Пример отчёта на 10.11.2026](REPORT-2026-11-10.md)
+- [Записка бухгалтеру](ACCOUNTANT.md)
+- [Решения и допущения](DECISIONS.md)
 
-## Verify
+## Проверки
 
 ```sh
 python3 -m unittest discover -s tests -v

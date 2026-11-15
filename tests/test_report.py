@@ -118,7 +118,7 @@ class AccountingReportTest(unittest.TestCase):
             rows[-1][2] = "W-11"
             with payment_path.open("w", encoding="utf-8", newline="") as stream:
                 csv.writer(stream).writerows(rows)
-            with self.assertRaisesRegex(DataError, "P-8: work 'W-11' does not belong"):
+            with self.assertRaisesRegex(DataError, "P-8: работа 'W-11' не относится к договору"):
                 load_ledger(copy)
 
     def test_cli_renders_report_and_handles_invalid_input(self) -> None:
@@ -130,4 +130,4 @@ class AccountingReportTest(unittest.TestCase):
         self.assertIn("Нераспределённые платежи — 25 000,00", output)
         with redirect_stderr(io.StringIO()) as stderr:
             self.assertEqual(main(["--as-of", "2026-02-30"]), 2)
-        self.assertIn("--as-of", stderr.getvalue())
+        self.assertIn("Ошибка: --as-of: укажите дату в формате ГГГГ-ММ-ДД", stderr.getvalue())
